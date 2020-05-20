@@ -1,9 +1,15 @@
 import java.awt.*;
 import java.util.*;
 import javax.swing.*;
-
+import java.awt.image.*;
 import java.awt.event.*;
 import javax.swing.event.*;
+import java.io.*;
+import java.io.FileFilter;
+
+import javax.imageio.*;
+import javax.swing.filechooser.FileNameExtensionFilter;
+import javax.swing.filechooser.*;
 
 public class PaintProgram extends JPanel implements MouseMotionListener, ActionListener, MouseListener,
 		AdjustmentListener, javax.swing.event.ChangeListener {
@@ -12,16 +18,20 @@ public class PaintProgram extends JPanel implements MouseMotionListener, ActionL
 	ArrayList<Shape> shapes;
 	JFrame frame;
 	JMenuBar bar;
+	JMenuItem save, open;
+	JMenu file;
 	JMenu menu;
 	JColorChooser colorChooser;
 	JScrollBar sb;
 	JMenuItem[] colorButtons;
-	JButton freeButton, rectButton,undoButton,redoButton;
+	JButton freeButton, rectButton, undoButton, redoButton;
 	boolean freeButtonOn, rectButtonOn, first;
 	int currX, currY, currWidth, currHeight;
 	Color[] colors;
 	Color colorSelected;
 	Shape currShape;
+	JFileChooser fileChooser;
+	BufferedImage loadedImg;
 	int strokeSize;
 	ImageIcon undo, redo, line, rect;
 	Stack<Shape> undoShapes;
@@ -58,10 +68,17 @@ public class PaintProgram extends JPanel implements MouseMotionListener, ActionL
 		colors = new Color[] { Color.RED, Color.ORANGE, Color.YELLOW, Color.GREEN, Color.BLUE, Color.PINK, Color.BLACK,
 				Color.CYAN };
 		colorButtons = new JMenuItem[colors.length];
+		file = new JMenu("File");
+		save = new JMenuItem("Save");
+		open = new JMenuItem("Open");
+		save.addActionListener(this);
+		open.addActionListener(this);
+		file.add(save);
+		file.add(open);
 		freeButton = new JButton();
 		rectButton = new JButton();
-		undoButton=new JButton();
-		redoButton=new JButton();
+		undoButton = new JButton();
+		redoButton = new JButton();
 		undoButton.addActionListener(this);
 		redoButton.addActionListener(this);
 		freeButton.addActionListener(this);
@@ -87,12 +104,14 @@ public class PaintProgram extends JPanel implements MouseMotionListener, ActionL
 		colorChooser.getSelectionModel().addChangeListener(this);
 		freeButton.setBackground(Color.lightGray);
 		menu.add(colorChooser);
+		bar.add(file);
 		bar.add(menu);
 		bar.add(freeButton);
 		bar.add(rectButton);
 		bar.add(undoButton);
 		bar.add(redoButton);
 		bar.add(sb);
+		fileChooser = new JFileChooser(System.getProperty("user.dir"));
 		this.addMouseMotionListener(this);
 		this.addMouseListener(this);
 		frame.add(bar, BorderLayout.NORTH);
@@ -104,8 +123,11 @@ public class PaintProgram extends JPanel implements MouseMotionListener, ActionL
 	public void paintComponent(Graphics g) {
 		super.paintComponent(g);
 		Graphics2D g2 = (Graphics2D) g;
-		g.setColor(Color.WHITE);
+		g.setColor(Color.white);
 		g.fillRect(0, 0, frame.getWidth(), frame.getHeight());
+		if(loadedImg!=null){
+			g.drawImage(loadedImg, 0, 0, null);
+		}
 		for (int x = 0; x < points.size() - 1; x++) {
 			g.setColor(points.get(x).getColor());
 			g2.setStroke(new BasicStroke(points.get(x).getStrokeSize()));
@@ -150,41 +172,74 @@ public class PaintProgram extends JPanel implements MouseMotionListener, ActionL
 			rectButton.setBackground(Color.lightGray);
 			freeButton.setBackground(null);
 		}
-		if(e.getSource()==undoButton){
-			if(cmdOrder.size()>0){
-				String temp=cmdOrder.pop();
+		if (e.getSource() == undoButton) {
+			if (cmdOrder.size() > 0) {
+				String temp = cmdOrder.pop();
 				undoCmdOrder.push(temp);
-				if(temp.equals("line")){
-					if(lines.size()>0){
-						undoLines.push(lines.remove(lines.size()-1));
+				if (temp.equals("line")) {
+					if (lines.size() > 0) {
+						undoLines.push(lines.remove(lines.size() - 1));
 						repaint();
 					}
 				}
-				if(temp.equals("shape")){
-					if(shapes.size()>0){
-						undoShapes.push(shapes.remove(shapes.size()-1));
+				if (temp.equals("shape")) {
+					if (shapes.size() > 0) {
+						undoShapes.push(shapes.remove(shapes.size() - 1));
 						repaint();
 					}
 				}
 			}
 		}
-		if(e.getSource()==redoButton){
-			if(undoCmdOrder.size()>0){
-				String temp=undoCmdOrder.pop();
+		if (e.getSource() == redoButton) {
+			if (undoCmdOrder.size() > 0) {
+				String temp = undoCmdOrder.pop();
 				cmdOrder.push(temp);
-				if(temp.equals("line")){
-					if(undoLines.size()>0){
+				if (temp.equals("line")) {
+					if (undoLines.size() > 0) {
 						lines.add(undoLines.pop());
 						repaint();
 					}
 				}
-				if(temp.equals("shape")){
-					if(undoShapes.size()>0){
+				if (temp.equals("shape")) {
+					if (undoShapes.size() > 0) {
 						shapes.add(undoShapes.pop());
 						repaint();
 					}
 				}
 			}
+		}
+		if (e.getSource() == save) {
+			FileNameExtensionFilter filter = new FileNameExtensionFilter("*.png", "png");
+			fileChooser.setFileFilter(filter);
+			if (fileChooser.showSaveDialog(null) == JFileChooser.APPROVE_OPTION) {
+				File file = fileChooser.getSelectedFile();
+				try {
+					String st = file.getAbsolutePath();
+					if (st.indexOf(".png") >= 0) {
+						st = st.substring(0, st.length() - 4);
+					}
+					ImageIO.write(createImage(), "png", new File(st + ".png"));
+				} catch (Exception a) {
+					// TODO: handle exception
+				}
+			}
+		}
+		if (e.getSource() == open) {
+			fileChooser.showOpenDialog(null);
+			File imgFile = fileChooser.getSelectedFile();
+			try {
+				loadedImg = ImageIO.read(imgFile);
+			} catch (Exception a) {
+				// TODO: handle exception
+			}
+			points = new ArrayList<Point>();
+			lines = new ArrayList<ArrayList<Point>>();
+			shapes = new ArrayList<Shape>();
+			undoShapes = new Stack<Shape>();
+			undoLines = new Stack<ArrayList<Point>>();
+			cmdOrder = new Stack<String>();
+			undoCmdOrder = new Stack<String>();
+			repaint();
 		}
 		repaint();
 	}
@@ -252,6 +307,14 @@ public class PaintProgram extends JPanel implements MouseMotionListener, ActionL
 		repaint();
 	}
 
+	public BufferedImage createImage() {
+		BufferedImage img = new BufferedImage(this.getWidth(), this.getHeight(), BufferedImage.TYPE_INT_RGB);
+		Graphics2D g2 = img.createGraphics();
+		this.paint(g2);
+		g2.dispose();
+		return img;
+	}
+
 	@Override
 	public void mousePressed(MouseEvent e) {
 		first = true;
@@ -259,7 +322,7 @@ public class PaintProgram extends JPanel implements MouseMotionListener, ActionL
 
 	@Override
 	public void stateChanged(ChangeEvent e) {
-		colorSelected=colorChooser.getColor();
+		colorSelected = colorChooser.getColor();
 
 	}
 
